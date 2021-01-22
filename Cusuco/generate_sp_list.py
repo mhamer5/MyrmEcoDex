@@ -2,7 +2,7 @@
 import pandas as pd 
 import numpy as np 
 myrmecodex_ant =  pd.read_csv("myrmecodex_sp_list_1.csv")
-llama = pd.read_csv("LLAMA_species_list.csv")
+llama = pd.read_csv("LLAMA_species_list.csv", encoding='windows-1252')
 
 myrmecodex_ant['Genus_'] = myrmecodex_ant['Genus'].astype(str) + '_'
 myrmecodex_ant=myrmecodex_ant[~myrmecodex_ant['gen_sp'].isin(myrmecodex_ant['Genus_'])] 
@@ -29,3 +29,17 @@ species_lists["Unique"] = species_lists["myrmecodex_ant_list"][~species_lists["m
 column_names=["MyrmEcoDex_Ant_Species", "LLAMA_Ant_Species","Unique_MyrmEcoDex"]
 
 species_lists.to_excel("species_lists.xlsx", index=False,header=column_names)
+
+gabi=pd.read_csv("GABI_Data_Release1.0_18012020.csv")
+honduras_cnp=gabi[['valid_species_name','locality','country','dubious','citation']]
+honduras_cnp=honduras_cnp.loc[(honduras_cnp.country == "Honduras")] 
+
+#locality_list = honduras_cnp['locality'].drop_duplicates() 
+#locality_list.to_excel("locality_list.xlsx", index=False)
+
+gabi_cnp_full = honduras_cnp[honduras_cnp.locality.str.contains('Cusuco', na=False)]
+#gabi_cnp_full['valid_species_name']=gabi_cnp_full.loc['valid_species_name'].str.replace(".", "_")
+gabi_cnp_full.to_excel("gabi_cnp_full.xlsx", index=False)
+
+gabi_cnp_nodup = gabi_cnp_full.drop_duplicates()
+gabi_cnp_nodup.to_excel("gabi_cnp_nodup.xlsx", index=False)
