@@ -61,7 +61,6 @@ column_names=["MyrmEcoDex_Ant_Species", "LLAMA_Ant_Species","Unique_MyrmEcoDex"]
 species_lists.to_excel("myrmecodex_unique_species_lists.xlsx", index=False,header=column_names)
 
 
-
 #GENERATE SHEETS UNIQUE TO DIFFERENT SOURCES
 
 #load in GABI data
@@ -134,3 +133,44 @@ sp_list_cross.to_excel("cnp_splist_cross.xlsx")
 
 ### Generate Full data sheet for Cusuco
 #subfam, gen, sp, source, citation, altitude, collection type, site name, date
+
+
+myrmecodex_2=pd.read_csv("CNP_ants_master_29012021.csv", encoding='windows-1252')
+myrmecodex_2=myrmecodex_2[["Subfamily", "Genus", "Species", "gen_sp", "Sampling method","Altitude"]]
+#clean the myrmecodex data
+#add a new column of Genus_ to use later to remove only Genus_ in gen_sp column
+myrmecodex_2['Genus_'] = myrmecodex_2['Genus'].astype(str) + '_'
+#drop all genera only determinations in gen_sp 
+myrmecodex_2=myrmecodex_2[~myrmecodex_2['gen_sp'].isin(myrmecodex_2['Genus_'])] 
+#drop genus column
+myrmecodex_2=myrmecodex_2.drop(['Genus_'], axis=1)
+#big list of things that should be removed from myrmecodex data gen_sp column
+target_drop = ["Acromyrmex_cf_coronatus or subterraneus","Neoponera_villosa or bactronica or solisi","Cardiocondyla?_","_","Camponotus_senex?","?_" ,"ID Step 70 (stuck)_","Camponotus_albicoxis?", 
+"????? old pachycondyla genus, revised genus not yet found_","Neoponera_villosa or bactronica or solisi","Key step 80: Pheidole of Nothridis_","Neoponera_villosa or bactronica or solisi","Neoponera_?",
+"Procryptocerus_mayri or batsi","Leptogenys_JTL023??","Rasopone_mesoamericana/ferruginea","Pheidole_cf ursus","Acromyrmex_cf_coronatus"]
+#drop everything in target drop from gen_sp
+myrmecodex_2=myrmecodex_2[~myrmecodex_2['gen_sp'].isin(target_drop)] 
+#remove all _cf_ from gen_sp (this should eventually not drop anything as we will be certain of our identifications eventually)
+myrmecodex_2['gen_sp']=myrmecodex_2['gen_sp'].str.replace("_cf_", "_")
+#do the same but with the species column
+myrmecodex_2['Species']=myrmecodex_2['Species'].str.replace("cf_", "")
+myrmecodex_2['source']='myrmecodex'
+myrmecodex_2 = myrmecodex_2.rename({'Sampling method': 'Method'}, axis=1)
+
+#antweb
+antweb_honduras2 =  pd.read_csv("antweb_honduras.csv", encoding='windows-1252')
+cusuco_antweb2 = antweb_honduras2[antweb_honduras2.LocalityName.str.contains('Cusuco', na=False)]
+cusuco_antweb2=cusuco_antweb2[['Subfamily', 'Genus','Species', "Method", "Elevation"]]
+cusuco_antweb2['source']='antweb'
+cusuco_antweb2=cusuco_antweb2.loc[(cusuco_antweb2.Species != '(indet)')]
+cusuco_antweb2=cusuco_antweb2.loc[(cusuco_antweb2.Species != 'indet')]
+#merge gen and sp
+cusuco_antweb2['Genus']=cusuco_antweb2['Genus'].str.capitalize()
+cusuco_antweb2['Method']=cusuco_antweb2['Method'].str.capitalize()
+cusuco_antweb2['gen_sp'] = cusuco_antweb2['Genus'].str.cat(cusuco_antweb2['Species'],sep="_")
+cusuco_antweb2['Subfamily']=cusuco_antweb2['Subfamily'].str.capitalize()
+cusuco_antweb2 = cusuco_antweb2.rename({'Elevation': 'Altitude'}, axis=1)
+master_antweb_myrmecodex = pd.concat([cusuco_antweb2,myrmecodex_2])
+master_antweb_myrmecodex=master_antweb_myrmecodex.dropna(subset=['Altitude'])
+master_antweb_myrmecodex['Altitude'] = master_antweb_myrmecodex['Altitude'].astype(int)
+master_antweb_myrmecodex.to_csv("master_antweb_myrmecodex.csv", index=False)
