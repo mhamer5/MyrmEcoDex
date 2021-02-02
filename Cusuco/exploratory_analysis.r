@@ -6,9 +6,11 @@ library(tidyverse)
 library(iNEXT)
 library(vegan)
 library(reshape2)
+library(pixiedust)
+library(openxlsx)
 
 
-cnp_ants_raw<-read_csv("CNP_ants_master_03012021.csv")[,1:30]
+cnp_ants_raw<-read_csv("CNP_ants_master_29012021.csv")[,1:30]
 cnp_ants_raw$`Count per morphospecies`<-gsub("+", "", cnp_ants_raw$`Count per morphospecies`)
 ###generate clean myrmecodex ant species list
 target_drop<-c("Acromyrmex_cf_coronatus or subterraneus",
@@ -66,30 +68,29 @@ target_drop<-c("Acromyrmex_cf_coronatus or subterraneus",
 "Azteca_",
 "Neoponera_cf_bugabensis",
 "Gnamptogenys_interrupta?")
-splist_clean<-filter(cnp_ants_raw, !(gen_sp %in% target_drop))
+data_clean<-filter(cnp_ants_raw, !(gen_sp %in% target_drop))
 #print(unique(splist_clean$gen_sp))
 
 #generate subsite by species matrix (this needs cleaning and annotation)
-matrix<-cnp_ants_raw%>%filter( `Sampling method` == "PF")%>%
+matrix<-data_clean%>%filter( `Sampling method` == "PF")%>%
   select("Count per morphospecies", "Field-note-neat", "gen_sp")
 colnames(matrix)<-c("count","subsite","species")
 matrix$count<-as.numeric(matrix$count)
 matrix<-melt(matrix)
-matrix<-cast(matrix, subsite ~ species, value="value")
+matrix<-dcast(matrix, subsite ~ species, value.var = "value", fill=0)
+
 matrix<-matrix %>% 
   remove_rownames %>% 
-  column_to_rownames(var="subsite")%>%
-  select(-"_")
-#generate a species list and compare to known species list of the park
-
+  column_to_rownames(var="subsite")
 
 #####
 #rank abundance plot for whole park and each camp
-species<-cnp_ants_raw%>%
+species<-data_clean%>%
   select("Count per morphospecies", "gen_sp")
 colnames(species)<-c("count","species")
 drop_na(species)
-colnames(species)<-c("count","species")
+
+
 species$count<-as.numeric(species$count, na.rm=T)
 species<-na.omit(species)
 species<-aggregate(species$count, by=list(Category=species$species), FUN=sum)
@@ -128,12 +129,12 @@ subfamily_abundance<-ggplot(subfamily, aes(x=reorder(Category, -x), y=x,)) +
   geom_bar(stat="identity")+theme_minimal()+
   labs(title="Subfamily Abundance in CNP", 
        x="Subfamily", y = "Abundance")
-
+subfamily_abundance
 rm(subfamily_abundance,subfamily,genus_abundance,genus,species_abundance,species)
 dev.off()
 
 #sp accum curves for each camps pitfall data summed into respective camps
-splist_clean<-splist_clean%>%filter( `Sampling method` == "PF")
+splist_clean<-data_clean%>%filter( `Sampling method` == "PF")
 
 ants_camps<-splist_clean%>%
   select("Count per morphospecies", "gen_sp", "associated_camp")%>%
@@ -142,7 +143,8 @@ colnames(ants_camps)<-c("count","species","camp")
 
 ants_camps$count<-as.numeric(ants_camps$count)
 ants_camps<-melt(ants_camps)
-ants_camps<-cast(ants_camps, camp ~ species, value="value")
+ants_camps<-dcast(ants_camps, camp ~ species, value.var = "value", fill=0)
+
 ants_camps<-ants_camps %>% 
   remove_rownames %>% 
   column_to_rownames(var="camp")
@@ -156,3 +158,28 @@ ants_camps<- list(guanales = ants_camps$guanales,
 ants_accum<-iNEXT(ants_camps, q=0, datatype="abundance", size=NULL, endpoint=NULL, knots=40, se=TRUE, conf=0.95, nboot=50)
 ggiNEXT(ants_accum, type=1, facet.var="none")
 
+#generate summary table from data made in the python script (it might be possible to make this table in python instead?)
+#needs author names 
+master<-read_csv("master_antweb_myrmecodex.csv")
+master$Altitude<-as.numeric(master$Altitude)
+
+table.1 <- master %>%
+  select(gen_sp, Altitude, Method, source)%>%
+  group_by(gen_sp)%>%
+  summarise(
+    MinAltitude = min(Altitude),
+    MaxAltitude = max(Altitude),
+    method = paste(unique(Method), collapse = ', '),
+    source = paste(unique(source), collapse = ', ')
+    ) 
+
+table.1$altitude=paste(table.1$MinAltitude, "-",table.1$MaxAltitude)
+
+table.1<-select(table.1, -c(MinAltitude,MaxAltitude))
+table.1$Subfamily <- with(master,
+                          Subfamily[match(table.1$gen_sp,
+                                       gen_sp)])
+
+write.xlsx(table.1, 'summary_table.xlsx')
+#after exporting, the table is sorted in excel and pasted into a landscape orientated word file
+#there must be a better more automated way of doing this?
