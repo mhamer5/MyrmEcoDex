@@ -9,81 +9,177 @@ library(reshape2)
 library(pixiedust)
 library(openxlsx)
 
+#Read in antweb data
+antweb_cnp_full<-read_csv("cnp_full_antweb.csv")
 
-cnp_ants_raw<-read_csv("CNP_ants_master_29012021.csv")[,1:30]
-cnp_ants_raw$`Count per morphospecies`<-gsub("+", "", cnp_ants_raw$`Count per morphospecies`)
+###generate clean antweb ant species list
+
+antweb_cnp_full$Genus<-str_to_title(antweb_cnp_full$Genus)
+antweb_cnp_full$Subfamily<-str_to_title(antweb_cnp_full$Subfamily)
+antweb_cnp_full$gen_sp<-paste(antweb_cnp_full$Genus, antweb_cnp_full$Species, sep="_")
+
+myrmecodex_cnp_full<-read_csv("CNP_ants_master_05042021.csv")[,1:30]
+
 ###generate clean myrmecodex ant species list
-target_drop<-c("Acromyrmex_cf_coronatus or subterraneus",
-"Neoponera_villosa or bactronica or solisi",
-"Cardiocondyla?_"   ,
-"_" ,
-"Atta_" ,
-"Camponotus_",
-"_",
-"Camponotus_senex?",
-"Labidus_",
-"?_" ,
-"ID Step 70 (stuck)_",
-"Camponotus_albicoxis?", 
-"Tetramorium_" ,
-"Rasopone_" ,
-"Gnamptogenys_cf_strigata",
-"Procryptocerus_",
-"Pheidole_",
-"Acromyrmex_cf_nobilis",
-"????? old pachycondyla genus, revised genus not yet found_",
-"Pachycondyla_",
-"Neoponera_villosa or bactronica or solisi",
-"Key step 80: Pheidole of Nothridis_",
-"Atta_cf_cephalotes",
-"Neoponera_villosa or bactronica or solisi",
-"Neoponera_?",
-"Procryptocerus_mayri or batsi",
-"Stenamma_",
-"Nylanderia_",
-"Temnothorax_",
-"Leptogenys_cf_imperatrix",
-"Hypoponera_",
-"Strumigenys_cf_myllorhapha",
-"Adelomyrmex_cf_microps",
-"Leptogenys_JTL023??",
-"Eciton_",
-"Apterostigma_",
-"Pseudoponera_",
-"Gnamptogenys_cf_mordax",
-"Leptogenys_cf_foveonates",
-"Rasopone_mesoamericana/ferruginea",
-"Pheidole_cf ursus",
-"Cardiocondyla_",
-"Strumigenys_cf_calamita",
-"Cephalotes_cf_multispinosus",
-"Acromyrmex_",
-"Leptogenys_",
-"Gnamptogenys_",
-"Solenopsis_",
-"Odontomachus_",
-"Pseudomyrmex_",
-"Acromyrmex_cf_coronatus",
-"Myrmelachista_",
-"Azteca_",
-"Neoponera_cf_bugabensis",
-"Gnamptogenys_interrupta?")
-data_clean<-filter(cnp_ants_raw, !(gen_sp %in% target_drop))
-#print(unique(splist_clean$gen_sp))
+myrmecodex_cnp_full$`Count per morphospecies`<-gsub("+", "", myrmecodex_cnp_full$`Count per morphospecies`)
+myrmecodex_cnp_full$gen_sp_nocf<-gsub("_cf_", "_", myrmecodex_cnp_full$gen_sp)
+print(unique(myrmecodex_cnp_full$gen_sp_nocf))
+#remove genus only identifications
+med_genus<-data.frame(unique(myrmecodex_cnp_full$Genus))
+med_genus$dash<-rep("_")
+med_genus$unique.myrmecodex_cnp_full.Genus.<-paste(med_genus$unique.myrmecodex_cnp_full.Genus., med_genus$dash, sep="")
+genus_<-med_genus$unique.myrmecodex_cnp_full.Genus.
+
+for (i in 1:length(genus_)){
+  myrmecodex_cnp_full <- myrmecodex_cnp_full[myrmecodex_cnp_full$gen_sp_nocf!=genus_[i], ] 
+}
+
+
+myrmecodex_cnp_full<-myrmecodex_cnp_full%>%
+  drop_na(gen_sp_nocf)
+
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
+
+
+#####PRODUCE MASTER SPECIES LIST ANTWEB AND MYRMECODEX
+myrmecodex_ants<-myrmecodex_cnp_full%>%select(
+  Subfamily, Genus, Species, gen_sp_nocf, `Sampling method`, Altitude
+)%>%
+  rename(Elevation = Altitude,
+         gen_sp = gen_sp_nocf,
+         Method = `Sampling method`
+  )%>%
+  drop_na()
+
+myrmecodex_ants$Elevation<-gsub("m","", myrmecodex_ants$Elevation)
+myrmecodex_ants$Elevation<-as.numeric(myrmecodex_ants$Elevation)
+myrmecodex_ants<-na.omit(myrmecodex_ants)
+myrmecodex_ants$Source<-"MyrmEcoDex"
+
+antweb<-antweb_cnp_full%>%select(
+  Subfamily, Genus, Species, gen_sp, Method, Elevation
+)%>%filter(!grepl("indet",Species))%>%
+  filter(!grepl("(indet)",Species))
+antweb$Source<-"AntWeb"
+
+combined<-bind_rows(antweb, myrmecodex_ants)
+
+combined_unique<-unique(combined)
+#generate summary table from data made in the python script (it might be possible to make this table in python instead?)
+#needs author names 
+#master<-read_csv("master_antweb_myrmecodex.csv")
+#master$Altitude<-as.numeric(master$Altitude)
+
+table.1 <- combined_unique %>%
+  select(Subfamily, Genus, gen_sp, Elevation, Method, Source)%>%
+  group_by(gen_sp)%>%
+  summarise(
+    MinAltitude = min(Elevation),
+    MaxAltitude = max(Elevation),
+    method = paste(unique(Method), collapse = ', '),
+    source = paste(unique(Source), collapse = ', ')
+  ) 
+
+table.1$altitude=paste(table.1$MinAltitude, "-",table.1$MaxAltitude)
+
+table.1<-select(table.1, -c(MinAltitude,MaxAltitude))
+table.1$Subfamily <- with(combined_unique,
+                          Subfamily[match(table.1$gen_sp,
+                                          gen_sp)])
+
+table.1$Genus <- with(combined_unique,
+                          Genus[match(table.1$gen_sp,
+                                          gen_sp)])
+
+table.1 <- table.1[, c(5, 6, 1, 2, 4, 3)]
+
+table.1<-table.1[
+  with(table.1, order(Subfamily, Genus, source)),
+]
+
+table.1<-table.1%>%select(-Genus)
+
+filename<-paste0(format(Sys.time(), "%m%d%Y"),'_combine_cnp_sp_list.xlsx')
+write.xlsx(table.1, filename)
+
+#after exporting, the table is sorted in excel and pasted into a landscape orientated word file
+#there must be a better more automated way of doing this?
+
+#Create summary tables for whole sp list, myrmecodex, antweb
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full", "myrmecodex_ants", "antweb", "combined_unique")])
+
+#ANTWEB
+antweb<-antweb%>%
+  select(Subfamily, Genus, Species, gen_sp)
+antweb<-unique(antweb)
+
+no.sp<-length(unique(antweb$gen_sp))
+no.gen<-length(unique(antweb$Genus))
+no.subfam<-length(unique(antweb$Subfamily))
+
+summary_antweb<-data.frame(no.sp,no.gen,no.subfam)
+colnames(summary_antweb)<-c("#No.Species", "#No.Genera", "#No.Subfamilies")
+summary_antweb<-data.frame(t(summary_antweb))
+summary_antweb<-rownames_to_column(summary_antweb)
+colnames(summary_antweb)<-c("Total #No. of", "Count")
+#add in a function to save into 'summary_tables' directory
+filename<-paste0(format(Sys.time(), "%m%d%Y"),'summary_antweb.xlsx')
+write.xlsx(summary_antweb, filename)
+
+#Myrmecodex
+myrmecodex_ants<-myrmecodex_ants%>%
+  select(Subfamily, Genus, Species, gen_sp)
+myrmecodex_ants<-unique(myrmecodex_ants)
+
+no.sp<-length(unique(myrmecodex_ants$gen_sp))
+no.gen<-length(unique(myrmecodex_ants$Genus))
+no.subfam<-length(unique(myrmecodex_ants$Subfamily))
+
+summary_myrmecodex<-data.frame(no.sp,no.gen,no.subfam)
+colnames(summary_myrmecodex)<-c("#No.Species", "#No.Genera", "#No.Subfamilies")
+summary_myrmecodex<-data.frame(t(summary_myrmecodex))
+summary_myrmecodex<-rownames_to_column(summary_myrmecodex)
+colnames(summary_myrmecodex)<-c("Total #No. of", "Count")
+
+filename<-paste0(format(Sys.time(), "%m%d%Y"),'summary_myrmecodex.xlsx')
+write.xlsx(summary_myrmecodex, filename)
+
+#antweb, myrmecodex combined
+combined_unique<-combined_unique%>%
+  select(Subfamily, Genus, Species, gen_sp)
+combined_unique<-unique(combined_unique)
+
+no.sp<-length(unique(combined_unique$gen_sp))
+no.gen<-length(unique(combined_unique$Genus))
+no.subfam<-length(unique(combined_unique$Subfamily))
+
+summary_combined<-data.frame(no.sp,no.gen,no.subfam)
+colnames(summary_combined)<-c("#No.Species", "#No.Genera", "#No.Subfamilies")
+summary_combined<-data.frame(t(summary_combined))
+summary_combined<-rownames_to_column(summary_combined)
+colnames(summary_combined)<-c("Total #No. of", "Count")
+
+filename<-paste0(format(Sys.time(), "%m%d%Y"),'summary_combined.xlsx')
+write.xlsx(summary_combined, filename)
+
+
+### generate combined Myrmecodex and AntWeb species list with:
+#collection type, genus species, subfamily
+
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
 
 #generate subsite by species matrix (this needs cleaning and annotation)
-matrix<-data_clean%>%filter( `Sampling method` == "PF")%>%
-  select("Count per morphospecies", "Field-note-neat", "gen_sp")
-colnames(matrix)<-c("count","subsite","species")
-matrix$count<-as.numeric(matrix$count)
-matrix<-melt(matrix)
-matrix<-dcast(matrix, subsite ~ species, value.var = "value", fill=0)
+#MED_matrix<-myrmecodex_cnp_full%>%filter( `Sampling method` == "PF")%>%
+ # select("Count per morphospecies", "Field-note-neat", "gen_sp_nocf")
+#colnames(MED_matrix)<-c("count","subsite","species")
+#matrix$count<-as.numeric(MED_matrix$count)
+#MED_matrix<-melt(MED_matrix)
+#MED_matrix<-dcast(MED_matrix, subsite ~ species, value.var = "value", fill=0)
+#MED_matrix<-MED_matrix %>% 
+ # remove_rownames %>% 
+ # column_to_rownames(var="subsite")
 
-matrix<-matrix %>% 
-  remove_rownames %>% 
-  column_to_rownames(var="subsite")
 
-#####
 #rank abundance plot for whole park and each camp
 species<-data_clean%>%
   select("Count per morphospecies", "gen_sp")
@@ -157,29 +253,3 @@ ants_camps<- list(guanales = ants_camps$guanales,
                 danto   =ants_camps$danto)
 ants_accum<-iNEXT(ants_camps, q=0, datatype="abundance", size=NULL, endpoint=NULL, knots=40, se=TRUE, conf=0.95, nboot=50)
 ggiNEXT(ants_accum, type=1, facet.var="none")
-
-#generate summary table from data made in the python script (it might be possible to make this table in python instead?)
-#needs author names 
-master<-read_csv("master_antweb_myrmecodex.csv")
-master$Altitude<-as.numeric(master$Altitude)
-
-table.1 <- master %>%
-  select(gen_sp, Altitude, Method, source)%>%
-  group_by(gen_sp)%>%
-  summarise(
-    MinAltitude = min(Altitude),
-    MaxAltitude = max(Altitude),
-    method = paste(unique(Method), collapse = ', '),
-    source = paste(unique(source), collapse = ', ')
-    ) 
-
-table.1$altitude=paste(table.1$MinAltitude, "-",table.1$MaxAltitude)
-
-table.1<-select(table.1, -c(MinAltitude,MaxAltitude))
-table.1$Subfamily <- with(master,
-                          Subfamily[match(table.1$gen_sp,
-                                       gen_sp)])
-
-write.xlsx(table.1, 'summary_table.xlsx')
-#after exporting, the table is sorted in excel and pasted into a landscape orientated word file
-#there must be a better more automated way of doing this?
