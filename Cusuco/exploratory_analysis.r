@@ -6,9 +6,9 @@ library(tidyverse)
 library(iNEXT)
 library(vegan)
 library(reshape2)
-library(pixiedust)
 library(openxlsx)
 
+####Read in data and clean ####
 #Read in antweb data
 antweb_cnp_full<-read_csv("cnp_full_antweb.csv")
 
@@ -39,9 +39,10 @@ myrmecodex_cnp_full<-myrmecodex_cnp_full%>%
   drop_na(gen_sp_nocf)
 
 rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
+#write.csv(antweb_cnp_full, "clean_antweb_cnp_full.csv")
+#write.csv(myrmecodex_cnp_full, "clean_myrmecodex_cnp_full.csv")
 
-
-#####PRODUCE MASTER SPECIES LIST ANTWEB AND MYRMECODEX
+####Produce master specie list antweb and myrmecodex####
 myrmecodex_ants<-myrmecodex_cnp_full%>%select(
   Subfamily, Genus, Species, gen_sp_nocf, `Sampling method`, Altitude
 )%>%
@@ -83,10 +84,10 @@ table.1 <- combined_unique %>%
 table.1$altitude=paste(table.1$MinAltitude, "-",table.1$MaxAltitude)
 
 table.1<-select(table.1, -c(MinAltitude,MaxAltitude))
+
 table.1$Subfamily <- with(combined_unique,
                           Subfamily[match(table.1$gen_sp,
                                           gen_sp)])
-
 table.1$Genus <- with(combined_unique,
                           Genus[match(table.1$gen_sp,
                                           gen_sp)])
@@ -98,14 +99,14 @@ table.1<-table.1[
 ]
 
 table.1<-table.1%>%select(-Genus)
-
+#export data frame with todays date
 filename<-paste0(format(Sys.time(), "%m%d%Y"),'_combine_cnp_sp_list.xlsx')
 write.xlsx(table.1, filename)
 
 #after exporting, the table is sorted in excel and pasted into a landscape orientated word file
-#there must be a better more automated way of doing this?
+#there must be a better more automated way of doing this? you can export to a comma delimated txt file instead
 
-#Create summary tables for whole sp list, myrmecodex, antweb
+####Create number summary tables for whole sp list, myrmecodex, antweb#####
 rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full", "myrmecodex_ants", "antweb", "combined_unique")])
 
 #ANTWEB
@@ -162,31 +163,29 @@ colnames(summary_combined)<-c("Total #No. of", "Count")
 filename<-paste0(format(Sys.time(), "%m%d%Y"),'summary_combined.xlsx')
 write.xlsx(summary_combined, filename)
 
-
-### generate combined Myrmecodex and AntWeb species list with:
-#collection type, genus species, subfamily
-
 rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
 
-#generate subsite by species matrix (this needs cleaning and annotation)
-#MED_matrix<-myrmecodex_cnp_full%>%filter( `Sampling method` == "PF")%>%
- # select("Count per morphospecies", "Field-note-neat", "gen_sp_nocf")
-#colnames(MED_matrix)<-c("count","subsite","species")
-#matrix$count<-as.numeric(MED_matrix$count)
-#MED_matrix<-melt(MED_matrix)
-#MED_matrix<-dcast(MED_matrix, subsite ~ species, value.var = "value", fill=0)
-#MED_matrix<-MED_matrix %>% 
- # remove_rownames %>% 
- # column_to_rownames(var="subsite")
+####Generate subsite by species matrix (this needs cleaning and annotation)#####
 
+MED_matrix<-myrmecodex_cnp_full%>%filter( `Sampling method` == "PF")%>%
+ select("Count per morphospecies", "Field-note-neat", "gen_sp_nocf")
+colnames(MED_matrix)<-c("count","subsite","species")
+matrix$count<-as.numeric(MED_matrix$count)
+MED_matrix<-melt(MED_matrix)
+MED_matrix<-dcast(MED_matrix, subsite ~ species, value.var = "value", fill=0)
+MED_matrix<-MED_matrix %>% 
+ remove_rownames %>% 
+ column_to_rownames(var="subsite")
 
-#rank abundance plot for whole park and each camp
-species<-data_clean%>%
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
+####Rank abundance plot for whole park and each camp####
+
+species<-myrmecodex_cnp_full%>%
   select("Count per morphospecies", "gen_sp")
 colnames(species)<-c("count","species")
 drop_na(species)
 
-
+#species
 species$count<-as.numeric(species$count, na.rm=T)
 species<-na.omit(species)
 species<-aggregate(species$count, by=list(Category=species$species), FUN=sum)
@@ -198,7 +197,8 @@ species_abundance<-ggplot(species, aes(x=reorder(Category, -x), y=x,)) +
        x="Species", y = "Abundance")
 species_abundance
 
-genus<-cnp_ants_raw%>%
+#genera
+genus<-myrmecodex_cnp_full%>%
   select("Count per morphospecies", "Genus")%>%
   drop_na(Genus)
 colnames(genus)<-c("count","genus")
@@ -213,7 +213,8 @@ genus_abundance<-ggplot(genus, aes(x=reorder(Category, -x), y=x,)) +
        x="Genus", y = "Abundance")
 genus_abundance
 
-subfamily<-cnp_ants_raw%>%
+#subfamily
+subfamily<-myrmecodex_cnp_full%>%
   select("Count per morphospecies", "Subfamily")%>%
   drop_na(Subfamily)
 colnames(subfamily)<-c("count","subfamily")
@@ -226,11 +227,12 @@ subfamily_abundance<-ggplot(subfamily, aes(x=reorder(Category, -x), y=x,)) +
   labs(title="Subfamily Abundance in CNP", 
        x="Subfamily", y = "Abundance")
 subfamily_abundance
-rm(subfamily_abundance,subfamily,genus_abundance,genus,species_abundance,species)
 dev.off()
 
-#sp accum curves for each camps pitfall data summed into respective camps
-splist_clean<-data_clean%>%filter( `Sampling method` == "PF")
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
+
+#######Species accum curves for each camps pitfall data summed into respective camps####
+splist_clean<-myrmecodex_cnp_full%>%filter( `Sampling method` == "PF")
 
 ants_camps<-splist_clean%>%
   select("Count per morphospecies", "gen_sp", "associated_camp")%>%
@@ -253,3 +255,54 @@ ants_camps<- list(guanales = ants_camps$guanales,
                 danto   =ants_camps$danto)
 ants_accum<-iNEXT(ants_camps, q=0, datatype="abundance", size=NULL, endpoint=NULL, knots=40, se=TRUE, conf=0.95, nboot=50)
 ggiNEXT(ants_accum, type=1, facet.var="none")
+
+rm(list=ls()[! ls() %in% c("antweb_cnp_full","myrmecodex_cnp_full")])
+
+####Percentage breakdown per subfamily ####
+
+
+#####Number of species per genera####
+
+#####Number of species per genera compared to Honduras as a whole####
+#download gabi, download antweb, merge. compare to cnp data
+
+gabi<-read_csv("GABI_Data_Release1.0_18012020.csv")
+gabi_honduras<-gabi%>%filter(country == "Honduras")%>%
+  select(genus_name_pub,species_name_pub)
+gabi_honduras$genus_name_pub<-str_trim(gabi_honduras$genus_name_pub)
+gabi_honduras$species_name_pub<-str_trim(gabi_honduras$species_name_pub)
+gabi_honduras$Genus_species<-paste(gabi_honduras$genus_name_pub,"_",gabi_honduras$species_name_pub)
+colnames(gabi_honduras)<-c("Genus", "Species", "Genus_species")
+rm(gabi)
+
+antweb_honduras<-read_csv("antweb_honduras.csv")
+antweb_honduras<-antweb_honduras%>%select(Genus, Species)
+antweb_honduras$Genus<-str_to_title(antweb_honduras$Genus)
+antweb_honduras$Genus_species<-paste(antweb_honduras$Genus,"_",antweb_honduras$Species)
+
+antweb_gabi_honduras<-bind_rows(gabi_honduras, antweb_honduras)
+antweb_gabi_honduras$Genus_species<-str_replace_all(antweb_gabi_honduras$Genus_species, " ", "")
+antweb_gabi_honduras<-unique(antweb_gabi_honduras)
+antweb_gabi_honduras<-arrange(antweb_gabi_honduras, Genus)
+#file<-"antweb_gabi_honduras.xlsx"
+#write.xlsx(antweb_gabi_honduras,file)
+
+antweb_gabi_honduras_edited<-read_csv("antweb_gabi_honduras_edited.csv")
+species_counts_aw_gabi<-antweb_gabi_honduras_edited%>%
+  count(Genus)
+colnames(species_counts_aw_gabi)<-c("Genus", "aw_gabi")
+
+
+myrmecodex_lama_cnp<-read_csv("06062021_combine_cnp_sp_list.csv")[,2]
+myrmecodex_lama_cnp<-myrmecodex_lama_cnp%>%separate(gen_sp, c("Genus", "Species"), sep = "([_])")
+
+species_counts_myrmecodex<-myrmecodex_lama_cnp%>%
+  count(Genus)
+colnames(species_counts_myrmecodex)<-c("Genus", "myrmecodex")
+
+cnp_compared_honduras<-full_join(species_counts_myrmecodex,species_counts_aw_gabi)
+cnp_compared_honduras<-drop_na(cnp_compared_honduras)
+cnp_compared_honduras$percentage<-(cnp_compared_honduras$myrmecodex/cnp_compared_honduras$aw_gabi)*100
+filename<-"cnp_compareto_honduras.xlsx"
+write.xlsx(cnp_compared_honduras, filename)
+
